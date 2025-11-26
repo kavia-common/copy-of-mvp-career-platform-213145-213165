@@ -178,12 +178,38 @@ Then start the server. On startup, the app will:
    - `role_competencies.json` (array of role-competency required levels)
 3. Upsert records and commit if any changes were applied.
 
+Notes:
+- The seeding flow now flushes newly created Roles and Competencies before applying Role-Competency mappings so that mappings resolve in a single transaction (no need for intermediate commit).
+- The ingestion directory is resolved robustly from either the current working directory or relative to the project root, so `INGESTION_JSON_DIR=data/imports` works consistently.
+
 Sample files are provided in `data/imports/` and are safe to modify. See `data/imports/README.md` for schema details.
 
 To verify:
 - GET /api/v1/roles (should list roles from JSON)
 - GET /api/v1/competencies (requires Authorization; should list competencies)
 - GET /api/v1/competencies/by-role?role_id=1 (requires Authorization; shows required levels for that role)
+
+### Verification (Step 2.0: SQLite schema & JSON seeding)
+
+Quick manual check:
+1. Ensure env is set (examples):
+   ```
+   DB_URL=sqlite:///./career_platform.db
+   SEED_FROM_JSON=1
+   INGESTION_JSON_DIR=data/imports
+   ```
+2. Start the server:
+   ```
+   uvicorn src.api.main:app --port 3001 --reload
+   ```
+3. Confirm the SQLite database file exists:
+   - `./career_platform.db` should be present in the working directory (or at your configured `SQLITE_PATH`).
+4. Confirm seeded data:
+   - `GET http://localhost:3001/api/v1/roles` returns 4 roles (from `data/imports/roles.json`).
+   - After authenticating, `GET http://localhost:3001/api/v1/competencies` returns 4 competencies.
+   - `GET http://localhost:3001/api/v1/competencies/by-role?role_id=1` returns required levels for the role (using `role_competencies.json`).
+
+If using a custom SQLite file path (e.g., `SQLITE_PATH=/data/cp.db` or `DB_URL=sqlite:////data/cp.db`), the backend will create parent directories automatically on startup.
 
 ## OpenAPI
 

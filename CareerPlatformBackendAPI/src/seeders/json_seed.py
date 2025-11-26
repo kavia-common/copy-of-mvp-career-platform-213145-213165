@@ -8,6 +8,7 @@ Environment variables:
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import Any, Dict, Iterable, Optional, Tuple
 
@@ -18,6 +19,8 @@ from src.models.competency import Competency
 from src.models.role import Role
 from src.models.role_competency import RoleCompetency
 
+logger = logging.getLogger(__name__)
+
 
 def _read_json(path: str) -> Optional[Any]:
     try:
@@ -25,10 +28,39 @@ def _read_json(path: str) -> Optional[Any]:
             return json.load(f)
     except FileNotFoundError:
         return None
+    except Exception as exc:  # defensive: malformed JSON or I/O errors
+        logger.warning("Failed to read JSON from %s: %s", path, exc)
+        return None
 
 
 def _normalize_bool(val: Any) -> bool:
     return str(val).strip().lower() in {"1", "true", "yes", "y"}
+
+
+def _resolve_ingestion_dir(dir_setting: str) -> str:
+    """
+    Resolve the ingestion directory robustly:
+    - Expand '~'
+    - If relative, resolve against CWD
+    - If not found, also try resolving relative to project root (two levels above this file)
+    """
+    candidate = os.path.expanduser(dir_setting)
+    if not os.path.isabs(candidate):
+        candidate_abs = os.path.abspath(candidate)
+    else:
+        candidate_abs = candidate
+
+    if os.path.exists(candidate_abs):
+        return candidate_abs
+
+    # Fallback: relative to project root (assuming this file lives under src/seeders/)
+    module_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    fallback = os.path.abspath(os.path.join(module_root, dir_setting))
+    if os.path.exists(fallback):
+        return fallback
+
+    # Return the absolute candidate anyway (readers will gracefully no-op on missing files)
+    return candidate_abs
 
 
 def upsert_roles(db: Session, items: Iterable[Dict[str, Any]]) -> int:
@@ -130,12 +162,18 @@ def upsert_role_competencies(db: Session, items: Iterable[Dict[str, Any]]) -> in
 
 # PUBLIC_INTERFACE
 def seed_from_json_if_enabled(db: Session) -> None:
-    """Seed roles, competencies, and role-competency mappings from JSON if configured."""
+    """Seed roles, competencies, and role-competency mappings from JSON if configured.
+
+    Notes:
+        - Uses a robust path resolver so INGESTION_JSON_DIR works from different working directories.
+        - Flushes after role and competency upserts so mapping upserts can resolve newly inserted records
+          within the same transaction (SessionLocal has autoflush=False).
+    """
     settings = get_settings()
     if not settings.seed_from_json:
         return
 
-    base_dir = settings.ingestion_json_dir
+    base_dir = _resolve_ingestion_dir(settings.ingestion_json_dir)
     roles_path = os.path.join(base_dir, "roles.json")
     comps_path = os.path.join(base_dir, "competencies.json")
     rc_path = os.path.join(base_dir, "role_competencies.json")
@@ -144,16 +182,28 @@ def seed_from_json_if_enabled(db: Session) -> None:
     comps = _read_json(comps_path) or []
     mappings = _read_json(rc_path) or []
 
+    total_roles = total_comps = total_maps = 0
     changed = False
+
     if roles:
-        upsert_roles(db, roles)
+        total_roles = upsert_roles(db, roles)
+        # Ensure newly added roles are visible to subsequent queries in the same session
+        db.flush()
         changed = True
+
     if comps:
-        upsert_competencies(db, comps)
+        total_comps = upsert_competencies(db, comps)
+        # Ensure newly added competencies are visible before mapping step
+        db.flush()
         changed = True
+
     if mappings:
-        upsert_role_competencies(db, mappings)
+        total_maps = upsert_role_competencies(db, mappings)
         changed = True
 
     if changed:
         db.commit()
+        logger.info(
+            "JSON seed applied from %s (roles=%d, competencies=%d, role_competencies=%d)",
+            base_dir, total_roles, total_comps, total_maps
+        )
