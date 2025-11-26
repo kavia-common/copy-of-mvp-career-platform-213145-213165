@@ -22,6 +22,7 @@ from src.models.template import Template
 from src.schemas.role import RoleCreate, RoleRead
 from src.schemas.template import TemplateCreate, TemplateOut, TemplateUpdate
 from src.seeders.json_seed import seed_from_json_if_enabled
+from src.api.middleware import RequestIdLoggingMiddleware
 
 # Tags metadata for OpenAPI documentation
 tags_metadata = [
@@ -64,6 +65,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Request ID + structured logging middleware (placed after CORS)
+app.add_middleware(RequestIdLoggingMiddleware)
 
 
 @app.on_event("startup")
