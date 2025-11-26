@@ -34,6 +34,7 @@ tags_metadata = [
     {"name": "Admin", "description": "Administrative endpoints (templates, audit logs)."},
     {"name": "Templates", "description": "CRUD operations for templates (demo)."},
     {"name": "Roles", "description": "CRUD operations for roles (SQLite via SQLAlchemy)."},
+    {"name": "Role Mapping", "description": "Role adjacency and mapping endpoints (via Node service with graceful fallback)."},
 ]
 
 # Configure FastAPI app with metadata and tags
@@ -313,6 +314,7 @@ from src.api.routers.assessment import router as assessment_router  # noqa: E402
 from src.api.routers.gap_analysis import router as gap_router  # noqa: E402
 from src.api.routers.development_plan import router as plan_router  # noqa: E402
 from src.api.routers.admin import router as admin_router  # noqa: E402
+from src.api.routers.role_adjacency import router as role_mapping_router  # noqa: E402
 
 app.include_router(auth_router)
 app.include_router(competencies_router)
@@ -320,3 +322,4 @@ app.include_router(assessment_router)
 app.include_router(gap_router)
 app.include_router(plan_router)
 app.include_router(admin_router)
+app.include_router(role_mapping_router)
