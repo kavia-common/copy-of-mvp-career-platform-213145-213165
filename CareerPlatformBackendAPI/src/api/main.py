@@ -49,9 +49,17 @@ app = FastAPI(
 )
 
 # CORS configuration
+# Configure allowed origins from environment for proper CORS handling
+origins_env = os.getenv("CORS_ALLOW_ORIGINS", "")
+if origins_env.strip():
+    allow_origins = [o.strip() for o in origins_env.split(",") if o.strip()]
+else:
+    # Sensible defaults for local development
+    allow_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, set to specific origins
+    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -119,6 +127,22 @@ def health_check() -> dict:
         dict: A simple message indicating the API is healthy.
     """
     return {"message": "Healthy"}
+
+
+# PUBLIC_INTERFACE
+@app.get(
+    "/api/v1/health",
+    summary="API v1 Health",
+    tags=["Health"],
+    responses={200: {"description": "Service is healthy"}},
+)
+def api_v1_health() -> dict:
+    """Versioned health check used by clients and proxies to verify reachability.
+
+    Returns:
+        dict: A simple message indicating the API is healthy at the versioned path.
+    """
+    return {"message": "Healthy", "status": "ok"}
 
 
 # ---------------------------
