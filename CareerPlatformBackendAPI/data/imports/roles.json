@@ -1,0 +1,6 @@
+[
+  { "name": "Chief Architect", "description": "Leads architecture strategy across the organization." },
+  { "name": "CTO", "description": "Owns technology strategy, org leadership and delivery." },
+  { "name": "VP Engineering", "description": "Leads engineering management and execution." },
+  { "name": "Enterprise Architect", "description": "Designs and governs enterprise-wide systems and integrations." }
+]

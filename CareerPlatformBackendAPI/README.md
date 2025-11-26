@@ -1,10 +1,10 @@
 # CareerPlatformBackendAPI
 
-This backend now uses SQLite by default for local development and test environments through SQLAlchemy. No external PostgreSQL service is required to start the API or run basic CRUD operations.
+This backend uses SQLite by default for local development and test environments through SQLAlchemy. No external PostgreSQL service is required to start the API or run basic CRUD operations.
 
 ## Quick start
 
-1. Optionally create a `.env` based on `.env.example` (not required for SQLite defaults).
+1. Optionally create a `.env` based on `.env.example` (recommended).
 2. Install dependencies:
    - pip install -r requirements.txt
 3. Run the server:
@@ -14,40 +14,105 @@ On first start, a local SQLite database file (`career_platform.db`) will be crea
 
 If you want a few sample roles auto-created for testing, set `SEED_SAMPLE_DATA=1` in your environment (or `.env`) before starting the server.
 
+If you want full role/competency/mapping data seeded from JSON, set `SEED_FROM_JSON=1` (see Seeding section below). Sample JSON files are provided in `data/imports/`.
+
 ## Configuration
 
 - DB_URL (optional): complete SQLAlchemy URL. Defaults to `sqlite:///./career_platform.db`.
 - SQLITE_PATH (optional): path to the SQLite file; used only if DB_URL is not set.
-- SEED_SAMPLE_DATA (optional): when truthy (e.g., `1`, `true`, `yes`), seeds a few sample roles on startup if the roles table is empty.
+- JWT_SECRET_KEY (required for non-dev): secret key for signing JWTs (see `.env.example`).
+- JWT_ALGORITHM (optional): default `HS256`.
+- ACCESS_TOKEN_EXPIRE_MINUTES (optional): default `60`.
+- SEED_FROM_JSON (optional): when truthy (e.g., `1`, `true`, `yes`), reads JSON from `INGESTION_JSON_DIR` and upserts roles/competencies/mappings.
+- INGESTION_JSON_DIR (optional): directory for JSON ingestion files. Default: `data/imports`.
+- SEED_SAMPLE_DATA (optional): when truthy, seeds a few sample roles on startup if the roles table is empty (fallback/demo).
+- REACT_APP_BACKEND_URL (optional): used by the development plan export stub to compose URLs.
 
 Examples:
 - SQLite (default): `DB_URL=sqlite:///./career_platform.db`
 - Custom path via SQLITE_PATH: `SQLITE_PATH=/data/career_platform.db`
-- Enable seeding: `SEED_SAMPLE_DATA=1`
+- Enable JSON seeding: `SEED_FROM_JSON=1` and `INGESTION_JSON_DIR=data/imports`
+- Enable sample roles: `SEED_SAMPLE_DATA=1`
 - PostgreSQL (optional, not required for dev): `DB_URL=postgresql+psycopg2://USER:PASSWORD@HOST:5432/DBNAME`  
   Note: running with PostgreSQL would require installing a driver such as `psycopg2-binary`. This project does not depend on it by default.
 
-## Roles API (SQLite-backed)
+## Auth (JWT) endpoints
 
-The API exposes a `roles` resource with versioned endpoints (`/api/v1`) to validate persistence using SQLite:
+- POST /api/v1/auth/register — create account (email, password, full_name)
+- POST /api/v1/auth/login — authenticate (email, password) and receive a JWT `access_token`
+- POST /api/v1/auth/logout — stateless logout (requires Authorization)
+- GET /api/v1/auth/profile — retrieve current user profile (requires Authorization)
+- PUT /api/v1/auth/profile — update profile fields (requires Authorization)
 
-- GET /api/v1/roles — list all roles
-- POST /api/v1/roles — create a role
-- GET /api/v1/roles/{id} — get a role by ID
+Quick test (example using curl):
+```bash
+# Register
+curl -s -X POST http://localhost:3001/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"Passw0rd!","full_name":"Example User"}'
 
-Optionally set `SEED_SAMPLE_DATA=1` to seed a few roles (e.g., Chief Architect, CTO, VP Engineering, Enterprise Architect) on startup if the table is empty.
+# Login
+TOKEN=$(curl -s -X POST http://localhost:3001/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"Passw0rd!"}' | jq -r .access_token)
 
-## Sample CRUD (Templates)
+# Profile
+curl -s http://localhost:3001/api/v1/auth/profile -H "Authorization: Bearer $TOKEN"
+```
 
-The API also exposes a simple `templates` resource to validate persistence using SQLite:
+## Domain routers
 
-- POST /templates
-- GET /templates
-- GET /templates/{template_id}
-- PUT /templates/{template_id}
-- DELETE /templates/{template_id}
+The following versioned routers are registered and documented in OpenAPI:
 
-These endpoints use SQLAlchemy and persist data into the SQLite database file.
+- Competencies
+  - GET /api/v1/competencies (auth required)
+  - GET /api/v1/competencies/by-role?role_id=... (auth required)
+- Assessments
+  - POST /api/v1/competency-assessment (auth required)
+- Gap Analysis
+  - POST /api/v1/gap-analysis (auth required)
+- Development Plans
+  - POST /api/v1/development-plan (auth required)
+  - POST /api/v1/development-plan/export (auth required)
+- Admin
+  - GET /api/v1/admin/templates (auth + admin required)
+  - POST /api/v1/admin/templates (auth + admin required)
+  - GET /api/v1/admin/audit-logs (auth + admin required)
+
+Additional demo CRUD:
+- Templates (unversioned demo)
+  - POST /templates
+  - GET /templates
+  - GET /templates/{template_id}
+  - PUT /templates/{template_id}
+  - DELETE /templates/{template_id}
+
+Roles (SQLite-backed):
+- GET /api/v1/roles — list roles
+- POST /api/v1/roles — create role
+- GET /api/v1/roles/{id} — get by id
+
+## Seeding from JSON (data/imports)
+
+Enable ingestion by setting:
+```
+SEED_FROM_JSON=1
+INGESTION_JSON_DIR=data/imports
+```
+Then start the server. On startup, the app will:
+1. Create all tables.
+2. Load JSON from the directory:
+   - `roles.json` (array of roles)
+   - `competencies.json` (array of competencies)
+   - `role_competencies.json` (array of role-competency required levels)
+3. Upsert records and commit if any changes were applied.
+
+Sample files are provided in `data/imports/` and are safe to modify. See `data/imports/README.md` for schema details.
+
+To verify:
+- GET /api/v1/roles (should list roles from JSON)
+- GET /api/v1/competencies (requires Authorization; should list competencies)
+- GET /api/v1/competencies/by-role?role_id=1 (requires Authorization; shows required levels for that role)
 
 ## OpenAPI
 
@@ -57,3 +122,12 @@ To regenerate the static `interfaces/openapi.json`, run:
 ```bash
 python -m src.api.generate_openapi
 ```
+
+This re-exports the live OpenAPI schema from the running app (including the Auth, Competencies, Assessment, Gap Analysis, Development Plan, and Admin routers).
+
+## SQLite notes
+
+- Default local DB path: `./career_platform.db`
+- Tables are auto-created on startup (no migrations required for the MVP).
+- To reset local data, stop the server and delete the SQLite file.
+

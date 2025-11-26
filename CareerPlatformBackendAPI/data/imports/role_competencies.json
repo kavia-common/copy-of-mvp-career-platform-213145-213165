@@ -1,0 +1,21 @@
+[
+  { "role": "Chief Architect", "competency": "Technical Architecture", "required_level": 5 },
+  { "role": "Chief Architect", "competency": "Strategic Thinking", "required_level": 4 },
+  { "role": "Chief Architect", "competency": "Team Leadership", "required_level": 4 },
+  { "role": "Chief Architect", "competency": "Stakeholder Management", "required_level": 3 },
+
+  { "role": "CTO", "competency": "Strategic Thinking", "required_level": 5 },
+  { "role": "CTO", "competency": "Team Leadership", "required_level": 5 },
+  { "role": "CTO", "competency": "Stakeholder Management", "required_level": 5 },
+  { "role": "CTO", "competency": "Technical Architecture", "required_level": 4 },
+
+  { "role": "VP Engineering", "competency": "Team Leadership", "required_level": 5 },
+  { "role": "VP Engineering", "competency": "Stakeholder Management", "required_level": 4 },
+  { "role": "VP Engineering", "competency": "Technical Architecture", "required_level": 3 },
+  { "role": "VP Engineering", "competency": "Strategic Thinking", "required_level": 4 },
+
+  { "role": "Enterprise Architect", "competency": "Technical Architecture", "required_level": 5 },
+  { "role": "Enterprise Architect", "competency": "Strategic Thinking", "required_level": 4 },
+  { "role": "Enterprise Architect", "competency": "Stakeholder Management", "required_level": 3 },
+  { "role": "Enterprise Architect", "competency": "Team Leadership", "required_level": 3 }
+]

@@ -1,0 +1,22 @@
+[
+  {
+    "name": "Strategic Thinking",
+    "definition": "Formulate long-term technology vision aligned to business outcomes.",
+    "category": "Leadership"
+  },
+  {
+    "name": "Technical Architecture",
+    "definition": "Design scalable, secure, resilient architectures.",
+    "category": "Architecture"
+  },
+  {
+    "name": "Team Leadership",
+    "definition": "Hire, grow and lead high-performing engineering teams.",
+    "category": "People"
+  },
+  {
+    "name": "Stakeholder Management",
+    "definition": "Influence and align executives and partners.",
+    "category": "Leadership"
+  }
+]
