@@ -1,30 +1,39 @@
-from typing import Generator, List
+from typing import List
 import os
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-
 from sqlalchemy.orm import Session
 
+from src.api.deps import get_db
 from src.db.database import Base, SessionLocal, engine
-from src.models.template import Template
-from src.schemas.template import TemplateCreate, TemplateOut, TemplateUpdate
-
-# New imports for Roles
+# Import model modules to ensure they are registered with SQLAlchemy's Base metadata
+from src.models import user as _models_user  # noqa: F401
+from src.models import role as _models_role  # noqa: F401
+from src.models import template as _models_template  # noqa: F401
+from src.models import competency as _models_competency  # noqa: F401
+from src.models import role_competency as _models_role_competency  # noqa: F401
+from src.models import assessment as _models_assessment  # noqa: F401
+from src.models import development_plan as _models_development_plan  # noqa: F401
+from src.models import audit as _models_audit  # noqa: F401
+from src.models import traceability as _models_traceability  # noqa: F401
 from src.models.role import Role
+from src.models.template import Template
 from src.schemas.role import RoleCreate, RoleRead
+from src.schemas.template import TemplateCreate, TemplateOut, TemplateUpdate
+from src.seeders.json_seed import seed_from_json_if_enabled
 
 # Tags metadata for OpenAPI documentation
 tags_metadata = [
     {"name": "Health", "description": "Service health and readiness checks."},
-    {
-        "name": "Templates",
-        "description": "CRUD operations for templates (backed by SQLite via SQLAlchemy).",
-    },
-    {
-        "name": "Roles",
-        "description": "CRUD operations for roles (backed by SQLite via SQLAlchemy).",
-    },
+    {"name": "Auth", "description": "User authentication, profile, and session endpoints."},
+    {"name": "Competencies", "description": "Competency catalog and role requirements."},
+    {"name": "Assessments", "description": "User competency assessments."},
+    {"name": "Gap Analysis", "description": "Compute competency gaps for a target role."},
+    {"name": "Development Plans", "description": "Generate and export development plans."},
+    {"name": "Admin", "description": "Administrative endpoints (templates, audit logs)."},
+    {"name": "Templates", "description": "CRUD operations for templates (demo)."},
+    {"name": "Roles", "description": "CRUD operations for roles (SQLite via SQLAlchemy)."},
 ]
 
 # Configure FastAPI app with metadata and tags
@@ -34,7 +43,7 @@ app = FastAPI(
         "Backend API for the MVP Career Platform. "
         "This instance uses SQLite (via SQLAlchemy) by default for local development and tests."
     ),
-    version="0.2.0",
+    version="0.3.0",
     openapi_tags=tags_metadata,
 )
 
@@ -52,24 +61,23 @@ app.add_middleware(
 def on_startup() -> None:
     """Create database tables and optionally seed data at application startup.
 
-    This ensures a clean developer experience without manual migration steps
-    while using SQLite in local development and test environments.
-
-    Seeding:
-        If the environment variable SEED_SAMPLE_DATA is set to a truthy value
-        (e.g., "1", "true", "yes"), and the roles table is empty, a small set
-        of sample roles will be inserted.
+    Flow:
+    1. Create all tables for known models.
+    2. If SEED_FROM_JSON=1, upsert roles/competencies/mappings from JSON files.
+    3. Else if SEED_SAMPLE_DATA=1 AND roles empty, seed a few roles as demo.
     """
-    # Create all tables for known models
+    # Create tables
     Base.metadata.create_all(bind=engine)
 
-    # Optional sample data seeding for Roles
-    seed_flag = os.getenv("SEED_SAMPLE_DATA", "").strip().lower()
-    should_seed = seed_flag in {"1", "true", "yes", "y"}
+    db = SessionLocal()
+    try:
+        # Seed from JSON if enabled
+        seed_from_json_if_enabled(db)
 
-    if should_seed:
-        db = SessionLocal()
-        try:
+        # Optional sample data seeding for Roles (fallback/demo)
+        seed_flag = os.getenv("SEED_SAMPLE_DATA", "").strip().lower()
+        should_seed = seed_flag in {"1", "true", "yes", "y"}
+        if should_seed:
             count = db.query(Role).count()
             if count == 0:
                 samples = [
@@ -92,22 +100,6 @@ def on_startup() -> None:
                 ]
                 db.add_all(samples)
                 db.commit()
-        finally:
-            db.close()
-
-
-# PUBLIC_INTERFACE
-def get_db() -> Generator[Session, None, None]:
-    """Dependency that provides a transactional SQLAlchemy Session.
-
-    Yields:
-        Session: A SQLAlchemy session bound to the configured engine.
-
-    Ensures the session is properly closed after request handling.
-    """
-    db = SessionLocal()
-    try:
-        yield db
     finally:
         db.close()
 
@@ -131,7 +123,6 @@ def health_check() -> dict:
 # ---------------------------
 # Templates CRUD (SQLite demo)
 # ---------------------------
-
 
 # PUBLIC_INTERFACE
 @app.post(
@@ -171,14 +162,7 @@ def create_template(payload: TemplateCreate, db: Session = Depends(get_db)) -> T
     responses={200: {"description": "List of templates"}},
 )
 def list_templates(db: Session = Depends(get_db)) -> List[TemplateOut]:
-    """List all templates.
-
-    Args:
-        db (Session): Database session dependency.
-
-    Returns:
-        List[TemplateOut]: All template records.
-    """
+    """List all templates."""
     templates = db.query(Template).order_by(Template.id.desc()).all()
     return [TemplateOut.model_validate(t) for t in templates]
 
@@ -195,18 +179,7 @@ def list_templates(db: Session = Depends(get_db)) -> List[TemplateOut]:
     },
 )
 def get_template(template_id: int, db: Session = Depends(get_db)) -> TemplateOut:
-    """Retrieve a template by its ID.
-
-    Args:
-        template_id (int): Unique ID of the template.
-        db (Session): Database session dependency.
-
-    Returns:
-        TemplateOut: The requested template.
-
-    Raises:
-        HTTPException: 404 if the template does not exist.
-    """
+    """Retrieve a template by its ID."""
     template = db.query(Template).filter(Template.id == template_id).first()
     if not template:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -227,19 +200,7 @@ def get_template(template_id: int, db: Session = Depends(get_db)) -> TemplateOut
 def update_template(
     template_id: int, payload: TemplateUpdate, db: Session = Depends(get_db)
 ) -> TemplateOut:
-    """Update fields on an existing template.
-
-    Args:
-        template_id (int): Unique ID of the template to update.
-        payload (TemplateUpdate): Fields to update.
-        db (Session): Database session dependency.
-
-    Returns:
-        TemplateOut: The updated template.
-
-    Raises:
-        HTTPException: 404 if the template does not exist.
-    """
+    """Update fields on an existing template."""
     template = db.query(Template).filter(Template.id == template_id).first()
     if not template:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -267,15 +228,7 @@ def update_template(
     },
 )
 def delete_template(template_id: int, db: Session = Depends(get_db)) -> None:
-    """Delete a template by its ID.
-
-    Args:
-        template_id (int): Unique ID of the template to delete.
-        db (Session): Database session dependency.
-
-    Raises:
-        HTTPException: 404 if the template does not exist.
-    """
+    """Delete a template by its ID."""
     template = db.query(Template).filter(Template.id == template_id).first()
     if not template:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -299,14 +252,7 @@ def delete_template(template_id: int, db: Session = Depends(get_db)) -> None:
     responses={200: {"description": "List of roles"}},
 )
 def list_roles(db: Session = Depends(get_db)) -> List[RoleRead]:
-    """List all roles.
-
-    Args:
-        db (Session): Database session dependency.
-
-    Returns:
-        List[RoleRead]: All role records.
-    """
+    """List all roles."""
     roles = db.query(Role).order_by(Role.id.asc()).all()
     return [RoleRead.model_validate(r) for r in roles]
 
@@ -326,18 +272,7 @@ def list_roles(db: Session = Depends(get_db)) -> List[RoleRead]:
     },
 )
 def create_role(payload: RoleCreate, db: Session = Depends(get_db)) -> RoleRead:
-    """Create a new role.
-
-    Args:
-        payload (RoleCreate): The role data to create.
-        db (Session): Database session dependency.
-
-    Returns:
-        RoleRead: The created role record.
-
-    Raises:
-        HTTPException: 409 if a role with the same name already exists.
-    """
+    """Create a new role."""
     existing = db.query(Role).filter(Role.name == payload.name).first()
     if existing:
         raise HTTPException(
@@ -364,19 +299,24 @@ def create_role(payload: RoleCreate, db: Session = Depends(get_db)) -> RoleRead:
     },
 )
 def get_role(role_id: int, db: Session = Depends(get_db)) -> RoleRead:
-    """Retrieve a role by its ID.
-
-    Args:
-        role_id (int): Unique ID of the role.
-        db (Session): Database session dependency.
-
-    Returns:
-        RoleRead: The requested role.
-
-    Raises:
-        HTTPException: 404 if the role does not exist.
-    """
+    """Retrieve a role by its ID."""
     role = db.query(Role).filter(Role.id == role_id).first()
     if not role:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return RoleRead.model_validate(role)
+
+
+# Include sub-routers for versioned API
+from src.api.routers.auth import router as auth_router  # noqa: E402
+from src.api.routers.competencies import router as competencies_router  # noqa: E402
+from src.api.routers.assessment import router as assessment_router  # noqa: E402
+from src.api.routers.gap_analysis import router as gap_router  # noqa: E402
+from src.api.routers.development_plan import router as plan_router  # noqa: E402
+from src.api.routers.admin import router as admin_router  # noqa: E402
+
+app.include_router(auth_router)
+app.include_router(competencies_router)
+app.include_router(assessment_router)
+app.include_router(gap_router)
+app.include_router(plan_router)
+app.include_router(admin_router)
