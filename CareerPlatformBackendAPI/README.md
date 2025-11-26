@@ -70,6 +70,8 @@ Notes:
 - MAPPING_SERVICE_URL (optional): Base URL for the Node RoleMappingService (default `http://localhost:4000`).
 - MAPPING_HTTP_TIMEOUT_SECONDS (optional): Per-attempt HTTP timeout used by the mapping client (default `2`).
 - MAPPING_HTTP_RETRIES (optional): Total retry attempts for the mapping client (default `2`).
+- CORS_ALLOW_ORIGINS (optional): Comma-separated list of allowed origins for CORS (e.g., `http://localhost:3000,http://127.0.0.1:3000`). Defaults to local dev origins when unset.
+- LOG_LEVEL (optional): Logging level for the backend (e.g., `DEBUG`, `INFO`, `WARNING`). Defaults to `INFO`. The request/response logs from the RequestIdLoggingMiddleware use the logger `career_platform.request`.
 
 Examples:
 - SQLite (default): `DB_URL=sqlite:///./career_platform.db`

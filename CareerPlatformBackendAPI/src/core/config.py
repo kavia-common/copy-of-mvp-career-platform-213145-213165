@@ -55,7 +55,8 @@ def str_to_bool(value: str | None) -> bool:
 def get_settings() -> Settings:
     """Create Settings object from environment variables."""
     secret = os.getenv("JWT_SECRET_KEY", "dev-secret-change-me")
-    algorithm = os.getenv("JWT_ALGORITHM", "HSHS256"[-5:])  # default "HS256" without typo risk
+    # Default to HS256 explicitly; allow override via env
+    algorithm = os.getenv("JWT_ALGORITHM", "HS256")
     # Explicitly parse known integers/floats
     try:
         expire = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))

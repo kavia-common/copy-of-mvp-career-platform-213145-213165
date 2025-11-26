@@ -1,5 +1,6 @@
 from typing import List
 import os
+import logging
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,6 +24,16 @@ from src.schemas.role import RoleCreate, RoleRead
 from src.schemas.template import TemplateCreate, TemplateOut, TemplateUpdate
 from src.seeders.json_seed import seed_from_json_if_enabled
 from src.api.middleware import RequestIdLoggingMiddleware
+
+# Configure base logging once, including request logger used by RequestIdLoggingMiddleware
+_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+try:
+    _level = getattr(logging, _level_str)
+except Exception:
+    _level = logging.INFO
+# Basic configuration (no-op if already configured by runtime)
+logging.basicConfig(level=_level, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+logging.getLogger("career_platform.request").setLevel(_level)
 
 # Tags metadata for OpenAPI documentation
 tags_metadata = [
