@@ -15,10 +15,9 @@ from src.models.role_competency import RoleCompetency
 from src.models.user import User
 from src.schemas.assessment import CompetencyLevel
 from src.schemas.development_plan import GapAnalysisRequest, GapAnalysisResult, GapItem
-from src.services.role_mapping_client import (
-    MappingServiceUnavailable,
-    get_competency_map_for_role as svc_get_competency_map_for_role,
-)
+# Import the client module so pytest monkeypatch applies to it
+import src.services.role_mapping_client as mapping_client
+from src.services.role_mapping_client import MappingServiceUnavailable
 
 router = APIRouter(prefix="/api/v1", tags=["Gap Analysis"])
 
@@ -70,7 +69,7 @@ def perform_gap_analysis(
     required_items: List[tuple[int, str, int]] = []
     used_service = False
     try:
-        svc_map = svc_get_competency_map_for_role(role.name)
+        svc_map = mapping_client.get_competency_map_for_role(role.name)
         if svc_map:
             # svc_map: { name -> required_level }, map to DB competency ids by name
             names = list(svc_map.keys())

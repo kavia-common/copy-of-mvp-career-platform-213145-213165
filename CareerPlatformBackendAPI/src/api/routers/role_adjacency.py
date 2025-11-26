@@ -29,11 +29,9 @@ from src.schemas.role_mapping import (
     AdjacencySharedCompetency,
     AdjacencyStats,
 )
-from src.services.role_mapping_client import (
-    MappingServiceUnavailable,
-    get_adjacency_details as svc_get_adjacency_details,
-    get_adjacent_roles as svc_get_adjacent_roles,
-)
+# Import the client module so pytest monkeypatching applies to our calls
+import src.services.role_mapping_client as mapping_client
+from src.services.role_mapping_client import MappingServiceUnavailable
 
 router = APIRouter(prefix="/api/v1", tags=["Role Mapping"])
 
@@ -191,7 +189,7 @@ def get_role_adjacency(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="role is required")
 
     try:
-        svc_data = svc_get_adjacent_roles(role, limit=limit, min_score=min_score)
+        svc_data = mapping_client.get_adjacent_roles(role, limit=limit, min_score=min_score)
         if svc_data is None:
             # Role not found in service; try local resolution for name validation
             return _local_adjacent_roles(db, role, limit=limit, min_score=min_score)
@@ -230,7 +228,7 @@ def get_role_adjacency_details(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="current_role and target_role are required")
 
     try:
-        svc_data = svc_get_adjacency_details(current_role, target_role)
+        svc_data = mapping_client.get_adjacency_details(current_role, target_role)
         if svc_data is None:
             # 404 in service - try local to see if we can compute anyway
             return _local_adjacency_details(db, current_role, target_role)
