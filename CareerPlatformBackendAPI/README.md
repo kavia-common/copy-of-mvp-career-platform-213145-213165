@@ -154,7 +154,30 @@ To regenerate the static `interfaces/openapi.json`, run:
 python -m src.api.generate_openapi
 ```
 
+Alternatively, if the app is already running locally, you can export directly from the live app:
+```bash
+curl -s http://localhost:3001/openapi.json > interfaces/openapi.json
+```
+
 This re-exports the live OpenAPI schema from the running app (including the Auth, Competencies, Assessment, Gap Analysis, Development Plan, Admin, and Role Mapping routers).
+
+## Testing
+
+This project includes minimal pytest coverage for health, auth, and roles.
+
+Run all tests:
+```bash
+pytest -q
+```
+
+Run a single test or file:
+```bash
+pytest -q tests/test_auth.py::test_auth_register_login_profile
+```
+
+Notes:
+- Tests automatically use a temporary SQLite database (via DB_URL) and do not require external services.
+- The Node RoleMappingService client is mocked during tests to prevent network access.
 
 ## SQLite notes
 
