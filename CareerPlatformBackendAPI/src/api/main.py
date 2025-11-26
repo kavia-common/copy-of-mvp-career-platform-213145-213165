@@ -1,4 +1,5 @@
 from typing import Generator, List
+import os
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,12 +10,20 @@ from src.db.database import Base, SessionLocal, engine
 from src.models.template import Template
 from src.schemas.template import TemplateCreate, TemplateOut, TemplateUpdate
 
+# New imports for Roles
+from src.models.role import Role
+from src.schemas.role import RoleCreate, RoleRead
+
 # Tags metadata for OpenAPI documentation
 tags_metadata = [
     {"name": "Health", "description": "Service health and readiness checks."},
     {
         "name": "Templates",
         "description": "CRUD operations for templates (backed by SQLite via SQLAlchemy).",
+    },
+    {
+        "name": "Roles",
+        "description": "CRUD operations for roles (backed by SQLite via SQLAlchemy).",
     },
 ]
 
@@ -41,12 +50,50 @@ app.add_middleware(
 
 @app.on_event("startup")
 def on_startup() -> None:
-    """Create database tables at application startup.
+    """Create database tables and optionally seed data at application startup.
 
     This ensures a clean developer experience without manual migration steps
     while using SQLite in local development and test environments.
+
+    Seeding:
+        If the environment variable SEED_SAMPLE_DATA is set to a truthy value
+        (e.g., "1", "true", "yes"), and the roles table is empty, a small set
+        of sample roles will be inserted.
     """
+    # Create all tables for known models
     Base.metadata.create_all(bind=engine)
+
+    # Optional sample data seeding for Roles
+    seed_flag = os.getenv("SEED_SAMPLE_DATA", "").strip().lower()
+    should_seed = seed_flag in {"1", "true", "yes", "y"}
+
+    if should_seed:
+        db = SessionLocal()
+        try:
+            count = db.query(Role).count()
+            if count == 0:
+                samples = [
+                    Role(
+                        name="Chief Architect",
+                        description="Leads architecture strategy across the organization.",
+                    ),
+                    Role(
+                        name="CTO",
+                        description="Executive responsible for overall technology strategy and execution.",
+                    ),
+                    Role(
+                        name="VP Engineering",
+                        description="Leads engineering teams and delivery of product initiatives.",
+                    ),
+                    Role(
+                        name="Enterprise Architect",
+                        description="Designs and governs enterprise-level systems and integrations.",
+                    ),
+                ]
+                db.add_all(samples)
+                db.commit()
+        finally:
+            db.close()
 
 
 # PUBLIC_INTERFACE
@@ -236,3 +283,100 @@ def delete_template(template_id: int, db: Session = Depends(get_db)) -> None:
     db.delete(template)
     db.commit()
     return None
+
+
+# ---------------------------
+# Roles CRUD (SQLite-backed)
+# ---------------------------
+
+# PUBLIC_INTERFACE
+@app.get(
+    "/api/v1/roles",
+    response_model=List[RoleRead],
+    summary="List roles",
+    description="List all roles currently stored in the database.",
+    tags=["Roles"],
+    responses={200: {"description": "List of roles"}},
+)
+def list_roles(db: Session = Depends(get_db)) -> List[RoleRead]:
+    """List all roles.
+
+    Args:
+        db (Session): Database session dependency.
+
+    Returns:
+        List[RoleRead]: All role records.
+    """
+    roles = db.query(Role).order_by(Role.id.asc()).all()
+    return [RoleRead.model_validate(r) for r in roles]
+
+
+# PUBLIC_INTERFACE
+@app.post(
+    "/api/v1/roles",
+    response_model=RoleRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create role",
+    description="Create a new role. Role names must be unique.",
+    tags=["Roles"],
+    responses={
+        201: {"description": "Role created successfully"},
+        400: {"description": "Invalid input"},
+        409: {"description": "Role already exists"},
+    },
+)
+def create_role(payload: RoleCreate, db: Session = Depends(get_db)) -> RoleRead:
+    """Create a new role.
+
+    Args:
+        payload (RoleCreate): The role data to create.
+        db (Session): Database session dependency.
+
+    Returns:
+        RoleRead: The created role record.
+
+    Raises:
+        HTTPException: 409 if a role with the same name already exists.
+    """
+    existing = db.query(Role).filter(Role.name == payload.name).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Role name already exists"
+        )
+
+    role = Role(name=payload.name, description=payload.description)
+    db.add(role)
+    db.commit()
+    db.refresh(role)
+    return RoleRead.model_validate(role)
+
+
+# PUBLIC_INTERFACE
+@app.get(
+    "/api/v1/roles/{role_id}",
+    response_model=RoleRead,
+    summary="Get role by ID",
+    description="Retrieve a role by its numeric ID.",
+    tags=["Roles"],
+    responses={
+        200: {"description": "Role found"},
+        404: {"description": "Role not found"},
+    },
+)
+def get_role(role_id: int, db: Session = Depends(get_db)) -> RoleRead:
+    """Retrieve a role by its ID.
+
+    Args:
+        role_id (int): Unique ID of the role.
+        db (Session): Database session dependency.
+
+    Returns:
+        RoleRead: The requested role.
+
+    Raises:
+        HTTPException: 404 if the role does not exist.
+    """
+    role = db.query(Role).filter(Role.id == role_id).first()
+    if not role:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return RoleRead.model_validate(role)
