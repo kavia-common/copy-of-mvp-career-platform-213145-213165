@@ -16,6 +16,46 @@ If you want a few sample roles auto-created for testing, set `SEED_SAMPLE_DATA=1
 
 If you want full role/competency/mapping data seeded from JSON, set `SEED_FROM_JSON=1` (see Seeding section below). Sample JSON files are provided in `data/imports/`.
 
+## Run with Docker Compose (recommended for local stack)
+
+Use the repo root `docker-compose.yml` to run the Node RoleMappingService, this FastAPI backend, and the React frontend together.
+
+Prereqs:
+- Docker and Docker Compose installed
+- A data directory with JSON files at `./data/imports` (repo root)
+
+Steps:
+1. Copy the root `.env.example` to `.env` and adjust values as needed:
+   ```bash
+   cp .env.example .env
+   ```
+   Key variables:
+   - BACKEND_SQLITE_PATH=/app/career_platform.db
+   - BACKEND_SEED_FROM_JSON=1
+   - BACKEND_INGESTION_JSON_DIR=/app/data/imports
+   - BACKEND_JWT_SECRET=change-me-in-prod
+   - BACKEND_MAPPING_SERVICE_URL=http://mapping:4000
+   - MAPPING_PORT=4000
+   - MAPPING_JSON_DIR=/app/data/imports
+   - FRONTEND_API_URL=http://localhost:3001/api/v1
+
+2. Start services from repo root:
+   ```bash
+   docker compose up -d mapping backend
+   # Optionally include the frontend:
+   docker compose up -d frontend
+   ```
+
+3. Endpoints:
+   - Backend: http://localhost:3001 (Swagger: http://localhost:3001/docs)
+   - Mapping service: http://localhost:4000/health
+   - Frontend (if started): http://localhost:3000
+
+Notes:
+- The compose stack mounts your repo `./data/imports` into both the backend and mapping service at `/app/data/imports` to enable JSON ingestion.
+- Service discovery is configured via `BACKEND_MAPPING_SERVICE_URL=http://mapping:4000`, where `mapping` is the docker service name.
+- SQLite lives inside the backend container at `BACKEND_SQLITE_PATH` (default `/app/career_platform.db`).
+
 ## Configuration
 
 - DB_URL (optional): complete SQLAlchemy URL. Defaults to `sqlite:///./career_platform.db`.
